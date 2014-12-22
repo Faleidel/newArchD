@@ -1,0 +1,629 @@
+<html onkeydown='keyDown(event)'>
+	<head>
+		<script src="/files/showdown.js"></script>
+		
+		<style>
+			html
+			{
+				background-color : rgb(83, 194, 173) ;
+			}
+			
+			.post
+			{
+				background-color : rgb(83, 194, 173);
+				padding : 20px ;
+				
+				margin : 10px ;
+				
+				display : inline-block ;
+				
+				-webkit-transition : background-color 0.5s, height 0.5s, width 0.5s ;
+				
+			}
+			
+			.svgLogo
+			{
+				float : right ;
+			}
+			
+			input, textarea
+			{
+				border : none ;
+				background-color : rgba(1,1,1,0.09) ;
+				border-bottom : 1px solid rgb(123,123,32) ;
+			}
+			input:focus, textarea:focus
+			{
+				outline-width : 0 ;
+			}
+			
+			.post > .postUI
+			{
+				display : none ;
+			}
+			
+			.post:hover
+			{
+				background-color : white;
+			}
+			
+			.post .user
+			{
+				font-size : 26px ;
+			}
+			
+			.postColapsBar
+			{
+				width : 10px ;
+				background-color : rgb(83, 184, 173) ;
+				
+				margin : 0 ;
+				padding : 0 ;
+				border : none ;
+				
+				-webkit-transition : background-color 0.5s, height 0.5s, width 0.5s ;
+				
+				cursor : hand ;
+			}
+			
+			.postTable
+			{
+				/* wtf css ... */
+				border-spacing : 0px ;
+			}
+			
+			.postTable:hover > * > * > .postColapsBar
+			{
+				background-color : rgb(240, 250, 250) ;
+			}
+			
+			.postTableDiv:hover > .postColapsBar
+			{
+				background-color : rgb(240, 250, 250) ;
+			}
+			
+			.postTable td, .postTable tr
+			{
+				margin:0;
+				padding:0;
+				border:none;
+			}
+			
+			.user
+			{
+				color : rgb(83, 44, 43);
+			}
+			
+			body
+			{
+				height: 100%;
+				width: 10000px;
+				overflow: hidden;
+			}
+			
+			.rootPostDiv, .rootRestartDiv, .rootLogo
+			{
+				padding : 10px ;
+				margin : 10px ;
+				
+				background-color : rgb(83, 154, 173);
+			}
+			
+			.rootToggle
+			{
+				float : right ;
+			}
+			
+			.globalUI
+			{
+				position : absolute ;
+				right : 0px ;
+			}
+			
+			.rootPosts
+			{
+				width: 100%;
+				height: 100%;
+				overflow: auto;
+				padding-right: 15px;
+			}
+			
+			.contentAndUser, .hideShowPostUI, .buttonSkin
+			{
+				cursor : hand ;
+				max-width : 800px ;
+			}
+			
+			.hideShowPostUI, .buttonSkin
+			{
+				padding : 10px ;
+				padding-top : 5px ;
+				padding-bottom : 5px ;
+				margin-top : 8px ;
+				margin-bottom : 8px ;
+				display : inline-block ;
+				background-color : rgb(80, 163, 138) ;
+				color : white ;
+			}
+		</style>
+		
+		<script>
+			logKeys = false;
+			function keyDown( e )
+			{
+				var evt = e || event.keyCode;
+				var press = evt.which || event.keyCode;
+				
+				if ( logKeys )
+					console.log( press );
+				
+				if ( !textInputFocus() )
+				{
+					if ( press == 72 )
+					{
+						toggleGlobalUI();
+					}
+					else if ( press == 32 && lastCLick != "" )
+					{
+						clickPost( lastCLick , 4 , true );
+					}
+					else if ( press == 67 && lastCLick != "" )
+					{
+						var postId = findPostFirstParent( lastCLick );
+						closePost( postId );
+						setHorizontalScroll( postId );
+					}
+				}
+				else
+				{
+					if ( press == 13 )
+					{
+						if ( document.activeElement.className.indexOf("restartRootsText") != -1 )
+						{
+							if ( document.getElementsByClassName("restartRootsText")[0].value == "" )
+								document.getElementsByClassName("restartRootsAllButton")[0].click();
+							else
+								document.getElementsByClassName("restartRootsButton")[0].click();
+						}
+					}
+					else if ( press == 27 )
+					{
+						document.activeElement.blur();
+					}
+				}
+				
+				keys[ press+"" ] = true;
+			}
+		</script>
+	</head>
+	<body onload="init()">
+		<script>
+			
+			handleLogoClick = function()
+			{
+				if ( document.webkitIsFullScreen )
+				{
+					//document.webkitExitFullscreen();
+					document.webkitCancelFullScreen();
+				}
+				else
+				{
+					document.documentElement.webkitRequestFullscreen( Element.ALLOW_KEYBOARD_INPUT );
+				}
+			}
+			
+			var queryString = function()
+			{
+				// This function is anonymous, is executed immediately and 
+				// the return value is assigned to QueryString!
+				var query_string = {};
+				var query = window.location.search.substring(1);
+				var vars = query.split("&");
+				for (var i=0;i<vars.length;i++)
+				{
+					var pair = vars[i].split("=");
+					// If first entry with this name
+					if (typeof query_string[pair[0]] === "undefined")
+					{
+						query_string[pair[0]] = pair[1];
+						// If second entry with this name
+					} else if (typeof query_string[pair[0]] === "string")
+					{
+						var arr = [ query_string[pair[0]], pair[1] ];
+						query_string[pair[0]] = arr;
+						// If third or later entry with this name
+					} else
+					{
+						query_string[pair[0]].push(pair[1]);
+					}
+				} 
+				return query_string;
+			} ();
+			
+			httpGet = function( url )
+			{
+				var xhReq = new XMLHttpRequest();
+				xhReq.open("GET", url, false);
+				xhReq.send(null);
+				var serverResponse = xhReq.responseText;
+				return serverResponse;
+			}
+			
+			textInputFocus = function()
+			{
+				return ((document.activeElement.tagName.toLowerCase() == "input") ||
+					(document.activeElement.tagName.toLowerCase() == "textarea"));
+			}
+			
+			getRealCss = function( el , st )
+			{
+				var style = window.getComputedStyle(el);
+				var v = style.getPropertyValue( st );
+				
+				return v;
+			}
+			
+			req = function()
+			{
+				var args = Array.prototype.slice.call(arguments);
+				
+				var q = "";
+				
+				for ( var i = 0 ; i < args.length ; i ++ )
+					q += encodeURIComponent(  args[i]  ) + ( i%2==1 ? "&" : "=" );
+				
+				var ret = "";
+				try{
+					ret = httpGet( "http://0.0.0.0:9000?" + q );
+					ret = JSON.parse( ret );
+				}
+				catch(e) { console.log( "faild req q:" , q , "e :" , e ); }
+				
+				return ret;
+			}
+			
+			getPosts = function( root )
+			{
+				var ch = getPostChildrens( root );
+				
+				return ch.map( getPost );
+			}
+			
+			getPostChildrens = function( id )
+			{
+				return req( "action" , "getChildrens" , "id" , id );
+			}
+			
+			findPostFirstParent = function( id )
+			{
+				if ( posts[id] != undefined && posts[ posts[id].parent ] != undefined )
+				{
+					return findPostFirstParent( posts[ posts[id].parent ]._id );
+				}
+				else
+				{
+					return id;
+				}
+			}
+			
+			getPost = function(id)
+			{
+				if ( posts[id] != undefined )
+					return posts[id];
+				
+				var p = req( "action" , "getPost"
+				            , "id"     , id
+				            );
+				p.deep = 0;
+				posts[ p._id ] = p;
+				return p;
+			}
+			
+			deletePost = function(id)
+			{
+				req( "action" , "deletePost" , "id" , id );
+				document.getElementsByClassName("post-"+id)[0].remove();
+			}
+			
+			tryPost = function(id)
+			{
+				var content = document.getElementsByClassName( "commentTextAreaOf"+id )[0].value;
+				var user    = document.getElementsByClassName( "commentUserOf"+id )[0].value;
+				
+				document.getElementsByClassName( "commentTextAreaOf"+id )[0].value = "";
+				document.getElementsByClassName( "commentUserOf"+id )[0].value = "";
+				
+				hideShowPostUI( id );
+				
+				var newId = req( "action" , "writePost" , "content" , content , "user" , user , "parent" , id ).id;
+				
+				var repp = posts[id];
+				var np = getPost( newId );
+				np.deep = repp.deep + 1;
+				posts[ np._id ] = np;
+				
+				document.getElementsByClassName("childrensOf"+id)[0].innerHTML +=
+					divWrap( renderPost( np ) );
+			}
+			
+			tryRootPost = function()
+			{
+				var content = document.getElementsByClassName( "rootTextArea" )[0].value;
+				var user    = document.getElementsByClassName( "rootUser" )[0].value;
+				var parent  = document.getElementsByClassName( "rootParent" )[0].value;
+				
+				document.getElementsByClassName( "rootTextArea" )[0].value = "";
+				document.getElementsByClassName( "rootUser" )[0].value = "";
+				document.getElementsByClassName( "rootParent" )[0].value = "";
+				
+				var newId = req( "action" , "writePost" , "content" , content , "user" , user , "parent" , parent ).id;
+				
+				var np = getPost( newId );
+				posts[ np._id ] = np;
+				np.deep = 0;
+				
+				document.getElementsByClassName( "rootPosts" )[0].innerHTML +=
+					divWrap( renderPost( np ) );
+			}
+			
+			hideShowPostUI = function(id)
+			{
+				var e = document.getElementsByClassName("postUIOf"+id)[0];
+				
+				e.style.display = getRealCss( e , "display" ) == "none" ? "block" : "none";
+			}
+			
+			renderPost = function(post)
+			{
+				var c = fromMarkup( post.content );
+				
+				var html = "";
+				
+				html += "<div class='postTableDiv'>";
+					html += "<table class='postTable'><tr>";
+						
+						html += "<td>";
+							html += "<div class='post post-"+post._id+"'>";
+								
+								html += "<div class='contentAndUser' onclick='clickPost(\""+post._id+"\",4,true)'>";
+									html += "<div class='user'>";
+										html += post.user;
+									html += "</div>";
+									
+									html += "<div class='content'>";
+										html += c;
+									html += "</div>";
+								html += "</div>";
+								
+								html += "<div class='hideShowPostUI hideShowPostUIOf"+post._id+"' onclick='hideShowPostUI(\""+post._id+"\")'>";
+									html += "Interact";
+								html += "</div>";
+								
+								html += "<div class='postUI postUIOf"+post._id+"'>";
+									html += "<div class='buttonSkin' onclick='deletePost(\""+post._id+"\")'>Delete post</div>";
+									html += "<input type='text' style='width:20px;' value='"+post._id+"'></input>"
+									
+									html += "<div class='commentTo"+post._id+"'>";
+										html += divWrap( "<input type='text' class='commentUserOf"+post._id+"'></input>" );
+										html += divWrap("<textarea class='commentTextAreaOf"+post._id+"' rows='10' cols='50' ></textarea>" );
+										html += divWrap( "<div class='buttonSkin' onclick='tryPost(\""+post._id+"\")'>Post</div>" );
+									html += "</div>";
+								html += "</div>";
+								
+								html += "<div class='childrensOf"+post._id+"'></div>";
+								
+							html += "</div>";
+						html += "</td>";
+						
+						html += "<td class='postColapsBar' onclick='clickPost(\""+post._id+"\",4,true)'>";
+						html += "</td>";
+						
+					html += "</tr></table>";
+					
+					html += "<div class='postColapsBar' style='height:10px;width:100%;' onclick='clickPost(\""+post._id+"\",4,true)'>";
+					html += "</div>";
+				html += "</div>";
+				return html;
+			}
+			clickPost = function(postId,deep,origin)
+			{
+				if ( deep == 0 ) return;
+				
+				var rpp = posts[postId];
+				
+				if ( origin )
+				{
+					lastCLick = postId;
+					setHorizontalScroll( postId );
+				}
+				
+				if ( document.getElementsByClassName("childrensOf"+postId)[0].innerHTML == false )
+				{
+					var ch = getPostChildrens( postId );
+					var rp = ch.map( getPost );
+					document.getElementsByClassName("childrensOf"+postId)[0].innerHTML +=
+						renderPosts( rp );
+					
+					rp.map( function(x){
+						x.deep = rpp.deep + 1;
+						posts[ x._id ] = x;
+						clickPost( x._id , deep-1 , false );
+					} );
+				}
+				else
+					closePost( postId );
+			}
+			
+			setHorizontalScroll = function( postId )
+			{
+				var rpp = posts[postId];
+				var rm = getRealCss( document.getElementsByClassName("rootPosts")[0] , "margin-left" );
+				document.getElementsByClassName("rootPosts")[0].style.marginLeft = (Math.max(rpp.deep-4,0)*-30) + "px";
+			}
+			
+			closePost = function( postId )
+			{
+				document.getElementsByClassName("childrensOf"+postId)[0].innerHTML = "";
+			}
+			
+			divWrap = function( html )
+			{
+				return "<div>"+html+"</div>";
+			}
+			
+			renderPosts = function(l)
+			{
+				var r = "";
+				
+				for ( var i = 0 ; i < l.length ; i++ )
+					r += divWrap( renderPost( l[i] ) );
+				
+				return r == "" ? "No posts" : r;
+			}
+			
+			addRootPostsAndGet = function( p )
+			{
+				postsL = getPosts( p );
+				addRootPosts( postsL );
+			}
+			
+			addRootPosts = function( postsL )
+			{
+				for ( var i = 0 ; i < postsL.length ; i++ )
+				{
+					postsL[i].deep = 0;
+					posts[ postsL[i]._id ] = postsL[i];
+				}
+				document.getElementsByClassName("rootPosts")[0].innerHTML += renderPosts( postsL );
+			}
+			
+			addRoots = function()
+			{
+				p = req( "action" , "getRoots" );
+				p = p.map( getPost );
+				addRootPosts( p );
+			}
+			
+			restartRootsTo = function( newRoot )
+			{
+				document.getElementsByClassName("rootPosts")[0].innerHTML = "";
+				addRootPosts( newRoot );
+			}
+			
+			restartRootsButton = function()
+			{
+				var rName = document.getElementsByClassName("restartRootsText")[0].value;
+				
+				window.history.pushState({"html":"asd","pageTitle":"newArchD"},"", "/files/app.html?root="+rName);
+				
+				restartRootsTo( getPostChildrens( rName ).map( getPost ) );
+				document.getElementsByClassName("restartRootsText")[0].value = "";
+			}
+			
+			restartRootsAllButton = function()
+			{
+				window.history.pushState({"html":"asd","pageTitle":"newArchD"},"", "/files/app.html");
+				document.getElementsByClassName("restartRootsText")[0].value = "";
+				document.getElementsByClassName("rootPosts")[0].innerHTML = "";
+				addRoots();
+			}
+			
+			toggleGlobalUI = function()
+			{
+				var h = getRealCss( document.getElementsByClassName("rootPostDiv")[0] , "display" );
+				h = h=="none"? "block" : "none"
+				document.getElementsByClassName("rootPostDiv")[0].style.display = h;
+				document.getElementsByClassName("rootRestartDiv")[0].style.display = h;
+				
+				if ( h == "block" )
+				{
+					//document.getElementsByClassName("rootParent")[0].focus();
+				}
+			}
+			
+			function init()
+			{
+				document.title = "newArchD";
+				
+				keys = {};
+				
+				var c = new Showdown.converter();
+				fromMarkup = c.makeHtml;
+				
+				posts = {};
+				lastCLick = "";
+				
+				var rootPost = document.createElement("div");
+				
+				var rootHtml = "";
+				
+				rootHtml = "<div class='rootToggle'>";
+					rootHtml += "<div onclick='toggleGlobalUI()'class='buttonSkin' >hide/show</div>";
+				rootHtml += "</div>";
+				
+				rootHtml += "<div class='rootPostDiv'>";
+					rootHtml += divWrap( "Subject: <input type='text' class='rootParent'></input>" );
+					rootHtml += divWrap( "Username: <input type='text' class='rootUser'></input>" );
+					rootHtml += divWrap( "<textarea class='rootTextArea' rows='10' cols='50' ></textarea>" );
+					rootHtml += divWrap( "<div class='buttonSkin' onclick='tryRootPost()'>Post</div>" );
+				rootHtml += "</div>";
+				
+				rootHtml += "<div class='rootRestartDiv'>";
+					rootHtml += "<div class='svgLogo' onclick='handleLogoClick()'>";
+						rootHtml += "<svg width='100' height='100'>";
+							rootHtml += "<circle ";
+								rootHtml += "cx='50'";
+								rootHtml += "cy='50'";
+								rootHtml += "r='40'";
+								rootHtml += "stroke='rgb(43, 134, 143)'";
+								rootHtml += "stroke-width='16'";
+								rootHtml += "fill='rgb(43, 134, 193)'";
+							rootHtml += "/>";
+							
+							rootHtml += "<circle ";
+								rootHtml += "cx='50'";
+								rootHtml += "cy='50'";
+								rootHtml += "r='10'";
+								rootHtml += "stroke='rgb(93, 134, 143)'";
+								rootHtml += "stroke-width='7'";
+								rootHtml += "fill='rgb(123, 134, 193)'";
+							rootHtml += "/>";
+						rootHtml += "</svg>";
+					rootHtml += "</div>";
+					rootHtml += divWrap( "New root: <input type='text' class='restartRootsText'></input>" );
+					rootHtml += divWrap( "<div class='buttonSkin restartRootsButton' onclick='restartRootsButton()'>Restart roots</div>" );
+					rootHtml += divWrap( "<div class='buttonSkin restartRootsAllButton' onclick='restartRootsAllButton()'>Restart to all roots</div>" );
+				rootHtml += "</div>";
+				
+				rootPost.innerHTML = rootHtml;
+				
+				rootPost.className = "globalUI";
+				
+				document.body.appendChild( rootPost );
+				
+				var cont = document.createElement("div");
+				cont.style.backgroundColor = "rgb(83, 194, 173)";
+				
+				cont.className = "rootPosts";
+				
+				document.body.appendChild( cont );
+				
+				if ( queryString["root"] != undefined )
+					addRootPostsAndGet( [ queryString["root"] ] );
+				else if ( queryString["id"] != undefined )
+				{
+					document.getElementsByClassName("rootPosts")[0].innerHTML += renderPost( getPost( queryString["id"] ) );
+				}
+				else
+					addRoots();
+				
+				var l = [];
+				for ( var k in posts )
+					l.push( posts[k]._id );
+				l.map( function(x){ clickPost( x , 4 , true ) } );
+				
+				document.body.style.backgroundColor = "rgb(93, 204, 183)";
+			}
+		</script>
+	</body>
+</html>
